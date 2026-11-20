@@ -61,3 +61,4 @@ type JOBOBJECT_EXTENDED_LIMIT_INFORMATION struct {
 
 //sys	CreateJobObject(jobAttrs *syscall.SecurityAttributes, name *uint16) (handle syscall.Handle, err error) = kernel32.CreateJobObjectW
 //sys	SetInformationJobObject(job syscall.Handle, infoclass uint32, info uintptr, infolien uint32) (err error) = kernel32.SetInformationJobObject
+//sys	TerminateJobObject(job syscall.Handle, exitCode uint32) (err error) = kernel32.TerminateJobObject

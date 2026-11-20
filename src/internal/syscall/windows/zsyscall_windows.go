@@ -97,6 +97,7 @@ var (
 	procRtlVirtualUnwind                  = modkernel32.NewProc("RtlVirtualUnwind")
 	procSetFileInformationByHandle        = modkernel32.NewProc("SetFileInformationByHandle")
 	procSetInformationJobObject           = modkernel32.NewProc("SetInformationJobObject")
+	procTerminateJobObject                = modkernel32.NewProc("TerminateJobObject")
 	procUnlockFileEx                      = modkernel32.NewProc("UnlockFileEx")
 	procVirtualQuery                      = modkernel32.NewProc("VirtualQuery")
 	procNetShareAdd                       = modnetapi32.NewProc("NetShareAdd")
@@ -536,6 +537,14 @@ func SetFileInformationByHandle(handle syscall.Handle, fileInformationClass uint
 func SetInformationJobObject(job syscall.Handle, infoclass uint32, info uintptr, infolien uint32) (err error) {
 	r1, _, e1 := syscall.SyscallN(procSetInformationJobObject.Addr(), uintptr(job), uintptr(infoclass), uintptr(info), uintptr(infolien))
 	if r1 == 0 {
+		err = errnoErr(e1)
+	}
+	return
+}
+
+func TerminateJobObject(job syscall.Handle, exitCode uint32) (err error) {
+	r1, _, e1 := syscall.SyscallN(procTerminateJobObject.Addr(), uintptr(job), uintptr(exitCode))
+	if uint32(r1) == 0 {
 		err = errnoErr(e1)
 	}
 	return
