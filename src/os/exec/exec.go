@@ -313,6 +313,20 @@ type Cmd struct {
 	// also closed their descriptors for the pipes.
 	WaitDelay time.Duration
 
+	// If ProcessGroup is true, Start places the command in a new process
+	// group, and both the Cancel function set by CommandContext and the kill
+	// after WaitDelay terminate the whole group instead of only Process.
+	// This also stops descendants of the command that would otherwise keep
+	// running and hold its I/O pipes open.
+	//
+	// On Unix, Start sets Setpgid in a copy of SysProcAttr, unless Setsid is
+	// set, and returns an error if SysProcAttr.Pgid is non-zero. Descendants
+	// that move to another process group are not killed.
+	//
+	// ProcessGroup is not supported on other systems.
+	// There, Start returns an error if it is set.
+	ProcessGroup bool
+
 	// childIOFiles holds closers for any of the child process's
 	// stdin, stdout, and/or stderr files that were opened by the Cmd itself
 	// (not supplied by the caller). These should be closed as soon as they
@@ -490,7 +504,8 @@ func Command(name string, arg ...string) *Cmd {
 // if the context becomes done before the command completes on its own.
 //
 // CommandContext sets the command's Cancel function to invoke the Kill method
-// on its Process, and leaves its WaitDelay unset. The caller may change the
+// on its Process, or to kill its process group if ProcessGroup is set,
+// and leaves its WaitDelay unset. The caller may change the
 // cancellation behavior by modifying those fields before starting the command.
 func CommandContext(ctx context.Context, name string, arg ...string) *Cmd {
 	if ctx == nil {
@@ -499,9 +514,17 @@ func CommandContext(ctx context.Context, name string, arg ...string) *Cmd {
 	cmd := Command(name, arg...)
 	cmd.ctx = ctx
 	cmd.Cancel = func() error {
-		return cmd.Process.Kill()
+		return cmd.kill()
 	}
 	return cmd
+}
+
+// kill kills c.Process, or its process group if c.ProcessGroup is set.
+func (c *Cmd) kill() error {
+	if c.ProcessGroup {
+		return c.killProcessGroup()
+	}
+	return c.Process.Kill()
 }
 
 // String returns a human-readable description of c.
@@ -741,11 +764,16 @@ func (c *Cmd) Start() error {
 		return err
 	}
 
+	sys, err := c.sysProcAttr()
+	if err != nil {
+		return err
+	}
+
 	c.Process, err = os.StartProcess(lp, c.argv(), &os.ProcAttr{
 		Dir:   c.Dir,
 		Files: childFiles,
 		Env:   env,
-		Sys:   c.SysProcAttr,
+		Sys:   sys,
 	})
 	if err != nil {
 		return err
@@ -844,7 +872,7 @@ func (c *Cmd) watchCtx(resultc chan<- ctxResult) {
 	}
 
 	killed := false
-	if killErr := c.Process.Kill(); killErr == nil {
+	if killErr := c.kill(); killErr == nil {
 		// We appear to have killed the process. c.Process.Wait should return a
 		// non-nil error to c.Wait unless the Kill signal races with a successful
 		// exit, and if that does happen we shouldn't report a spurious error,
