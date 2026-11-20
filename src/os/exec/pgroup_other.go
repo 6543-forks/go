@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-//go:build !unix
+//go:build !unix && !windows
 
 package exec
 
@@ -24,3 +24,5 @@ func (c *Cmd) sysProcAttr() (*syscall.SysProcAttr, error) {
 func (c *Cmd) killProcessGroup() error {
 	return c.Process.Kill()
 }
+
+func (c *Cmd) releaseProcessGroup() {}

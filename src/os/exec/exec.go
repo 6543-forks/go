@@ -314,14 +314,17 @@ type Cmd struct {
 	WaitDelay time.Duration
 
 	// If ProcessGroup is true, Start places the command in a new process
-	// group, and both the Cancel function set by CommandContext and the kill
-	// after WaitDelay terminate the whole group instead of only Process.
-	// This also stops descendants of the command that would otherwise keep
-	// running and hold its I/O pipes open.
+	// group (on Windows, a new job object), and both the Cancel function
+	// set by CommandContext and the kill after WaitDelay terminate the
+	// whole group instead of only Process. This also stops descendants of
+	// the command that would otherwise keep running and hold its I/O pipes
+	// open.
 	//
 	// On Unix, Start sets Setpgid in a copy of SysProcAttr, unless Setsid is
 	// set, and returns an error if SysProcAttr.Pgid is non-zero. Descendants
 	// that move to another process group are not killed.
+	//
+	// On Windows, Start adds the job object to a copy of SysProcAttr.Jobs.
 	//
 	// ProcessGroup is not supported on other systems.
 	// There, Start returns an error if it is set.
@@ -351,6 +354,9 @@ type Cmd struct {
 
 	// If ctxResult is non-nil, it receives the result of watchCtx exactly once.
 	ctxResult <-chan ctxResult
+
+	// job is the Windows job object created for ProcessGroup, if any.
+	job uintptr
 
 	// The stack saved when the Command was created, if GODEBUG contains
 	// execwait=2. Used for debugging leaks.
@@ -689,6 +695,7 @@ func (c *Cmd) Start() error {
 			closeDescriptors(c.parentIOPipes)
 			c.parentIOPipes = nil
 			c.goroutine = nil // aid GC, finalization of pipe fds
+			c.releaseProcessGroup()
 		}
 	}()
 
@@ -986,6 +993,7 @@ func (c *Cmd) Wait() error {
 			err = watch.err
 		}
 	}
+	c.releaseProcessGroup()
 
 	if goroutineErr := c.awaitGoroutines(timer); err == nil {
 		// Report an error from the copying goroutines only if the program otherwise

@@ -42,3 +42,5 @@ func (c *Cmd) killProcessGroup() error {
 	}
 	return err
 }
+
+func (c *Cmd) releaseProcessGroup() {}
